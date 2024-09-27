@@ -18,7 +18,7 @@ async function getBundleStatuses(bundleId: string) {
 
   return response.data.result.value;
 }
-
+// Dispatches a bundle to the block engine
 export async function dispatchJitoBundle({ transactions, tipAmountOverrideFloat, signerKeypair }: { transactions: VersionedTransaction[]; tipAmountOverrideFloat?: number; signerKeypair: Keypair }) {
   logger.info(`[jito::bundler] Using ${blockEngineUrl} as the block engine URL.`);
 
@@ -34,10 +34,10 @@ export async function dispatchJitoBundle({ transactions, tipAmountOverrideFloat,
 
   let tipAmountLamports = floatToLamports(tipAmountOverrideFloat ? tipAmountOverrideFloat : averageJitoTip);
 
-  // Add 15% tip to the bundle
 
-  tipAmountLamports = Math.floor(tipAmountLamports * 2.5);
-
+// Increase the tip amount by 75% to increase the chances of the bundle being picked up by the block engine
+  tipAmountLamports = Math.floor(tipAmountLamports * 1.75);
+// Add the tip transaction to the bundle
   bundle.addTipTx(signerKeypair, tipAmountLamports, tipAccount, latestBlockhash.blockhash);
 
   try {

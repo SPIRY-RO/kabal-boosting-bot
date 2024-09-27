@@ -38,23 +38,23 @@ export async function showVolumeBoosterDetailsAction(ctx: Context, boosterId: st
       puppetMsg += `\n ${i + 1}. ${truncateAddress(keypair.publicKey.toBase58())} - ${balance} SOL`;
     }
 
-    const message = ` Volume Booster Details
-ID: ${booster.id}
-Token: ${booster.tokenName} (${booster.tokenSymbol})
-Address: ${truncateAddress(booster.tokenAddress)}
-Slave: ${truncateAddress(booster.slaveWalletAddress)} | Balance: ${slaveBalance.toFixed(3)} SOL
+const message = `🚀 *Volume Booster Details* 🚀
+    🆔 *ID:* ${booster.id}
+    💰 *Token:*  ${booster.tokenName} (${booster.tokenSymbol})
+    🏠 *Address:* ${truncateAddress(booster.tokenAddress)}
+    🔗 *Slave:*  ${truncateAddress(booster.slaveWalletAddress)} | Balance: ${slaveBalance.toFixed(3)} SOL
 
-Total buys: ${booster.totalBuysSol.toFixed(3)} SOL
-Total sells: ${booster.totalSellsSol.toFixed(3)} SOL
-Total volume: ${(booster.totalBuysSol + booster.totalSellsSol).toFixed(3)} SOL
-Total volume USD: $${(solanaUsdPrice * (booster.totalBuysSol + booster.totalSellsSol)).toFixed(2)}
+    📈 *Total Buys:* ${booster.totalBuysSol.toFixed(3)} SOL
+    📉 *Total Sells:* ${booster.totalSellsSol.toFixed(3)} SOL
+    🔄 *Total Volume:* ${(booster.totalBuysSol + booster.totalSellsSol).toFixed(3)} SOL
+    💲 *Total Volume USD:* ${(solanaUsdPrice * (booster.totalBuysSol + booster.totalSellsSol)).toFixed(2)}
 
 ${puppetMsg}
 
 ${autoStopEnabled ? `Auto stops after: ${booster.autoStopAfter?.toUTCString().replace("GMT", "UTC")} (${moment(booster.autoStopAfter).fromNow()})` : ""}
 
-TX speed: ${booster.txDelaySeconds} seconds
-Status: ${booster.status}
+⏱️ *TX Speed:* ${booster.txDelaySeconds} seconds
+📊 *Status:* ${booster.status}
 `;
 
     let actionButton;

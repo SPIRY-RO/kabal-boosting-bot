@@ -45,39 +45,36 @@ telegraf.start(async (ctx) => {
 export let inlineKeyboard = [
   [
     {
-      text: "Rent the bot",
+      text: "🤖 Rent the bot",
       callback_data: "rent",
     },
   ],
   [
     {
-      text: "=== MY BOOSTERS ===",
+      text: "📈📉 === MY BOOSTERS ===",
       callback_data: "none",
     },
   ],
   [
     {
-      text: "Volume",
+      text: "📊 Volume Boosters",
       callback_data: "volume_boosters",
     },
     {
-      text: "Holder ",
+      text: "💼 Holder Boosters",
       callback_data: "holder_boosters",
     },
     {
-      text: "Rank ",
+      text: "🏆 Rank Boosters",
       callback_data: "rank_boosters",
     },
   ],
-
   [
     {
       text: "🔙 Main menu",
       callback_data: "main_menu",
     },
   ],
-
-  // [Markup.button.callback("▶️ Main menu", "main_menu")],
 ];
 
 telegraf.use(session());
