@@ -11,7 +11,7 @@ datasource db {
 }
 
 model TokenInfo {
-  id         String  @id @default(auto()) @map("_id") @db.ObjectId
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
   tokenAddress String
   tokenSymbol String
   tokenName String
