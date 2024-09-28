@@ -1,6 +1,5 @@
 import { Telegraf, Markup, Scenes, session } from "telegraf";
 
-import * as c from "./constants";
 import { config } from "./config";
 import { downloadFileFromURL, generateStartMenu, getUserMembershipLevel } from "./helpers";
 import { PrismaClient } from "@prisma/client";
@@ -45,29 +44,28 @@ telegraf.start(async (ctx) => {
 
 export let inlineKeyboard = [
   [
-    
     {
-      text: `${c.icons.clockAntique} BUY RENT TIME`,
+      text: "⏳ BUY RENT TIME",
       callback_data: "rent",
     },
   ],
   [
     {
-      text: `${c.icons.upmarket} == KABAL SERVICE BOOSTER == ${c.icons.downmarket}`,
+      text: "📈 == KABAL SERVICE BOOSTER == 📉",
       callback_data: "none",
     },
   ],
   [
     {
-      text: `${c.icons.volumeBoosters} Volume Boosters`,
+      text: "📊 Volume Boosters",
       callback_data: "volume_boosters",
     },
     {
-      text: `${c.icons.holderBoosters} Holder Boosters`,
+      text: "💼 Holder Boosters",
       callback_data: "holder_boosters",
     },
     {
-      text: `${c.icons.rankBoosters} Rank Boosters`,
+      text: "🏆 Rank Boosters",
       callback_data: "rank_boosters",
     },
   ],
