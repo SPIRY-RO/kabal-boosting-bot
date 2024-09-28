@@ -43,7 +43,6 @@ export const icons = {
   moonWhite: "🪙",
   chainLink: "🔗",
   chartUpRed: "📈",
-  chartBars: "📊",
   volumeBoosters: "📊",
   holderBoosters: "💼",
   rankBoosters: "🏆",
