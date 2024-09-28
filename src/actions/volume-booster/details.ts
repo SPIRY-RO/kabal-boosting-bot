@@ -38,7 +38,10 @@ export async function showVolumeBoosterDetailsAction(ctx: Context, boosterId: st
       puppetMsg += `\n ${i + 1}. ${truncateAddress(keypair.publicKey.toBase58())} - ${balance} SOL`;
     }
 
-const message = `🚀 Volume Booster Details🚀
+const message = `
+                          🚀 Volume Booster Details🚀
+
+
     🆔 ID: ${booster.id}
 
 
