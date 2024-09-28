@@ -91,19 +91,19 @@ export async function generateStartMenu(ctx: Context) {
   const rentExpiryAt = user.rentExpiresAt;
 
   return `
-🚀 *Kabal Boosting Service* 🚀
+🚀 Kabal Boosting Service 🚀
 
-💼 *Wallet:* ${user?.masterWalletAddress || "Not set"}
-💰 *Balance:* ${balance.toFixed(4)} SOL
-⏳ *Rent Expiry:* ${rentExpiryAt ? moment(user?.rentExpiresAt).format("DD/MM/YYYY HH:mm") : "No credits. Please fund wallet"}
+💼 Wallet: ${user?.masterWalletAddress || "Not set"}
+💰 Balance: ${balance.toFixed(4)} SOL
+⏳ Rent Expiry: ${rentExpiryAt ? moment(user?.rentExpiresAt).format("DD/MM/YYYY HH:mm") : "No credits. Please fund wallet"}
 
-🔗 *Referred by:* ${user?.referredByTelegramId || "Not set"}
+🔗 Referred by: ${user?.referredByTelegramId || "Not set"}
 
-👇 *Click the buttons to get started* 👇
-
-🔹 *Functions:*
+🔹 Functions:
 1. 📈 Boost your trading volume
 2. 💼 Manage your crypto holdings
 3. 🏆 Improve your rank in the crypto community
+
+👇 Click the buttons to get started 👇
 `;
 }
