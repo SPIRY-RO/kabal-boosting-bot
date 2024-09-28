@@ -39,7 +39,7 @@ export async function showVolumeBoosterDetailsAction(ctx: Context, boosterId: st
     }
 
 const message = `
-                          🚀 Volume Booster Details🚀
+    🚀 Volume Booster Details🚀
 
 
     🆔 ID: ${booster.id}
