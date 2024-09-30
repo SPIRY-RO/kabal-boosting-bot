@@ -36,7 +36,7 @@ export async function dispatchJitoBundle({ transactions, tipAmountOverrideFloat,
 
 
 // Increase the tip amount by 75% to increase the chances of the bundle being picked up by the block engine
-  tipAmountLamports = Math.floor(tipAmountLamports * 1.6);
+  tipAmountLamports = Math.floor(tipAmountLamports * 1.55);
 // Add the tip transaction to the bundle
   bundle.addTipTx(signerKeypair, tipAmountLamports, tipAccount, latestBlockhash.blockhash);
 
