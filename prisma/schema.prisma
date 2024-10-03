@@ -11,7 +11,7 @@ datasource db {
 }
 
 model TokenInfo {
-  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  id         String  @id @default(auto()) @map("_id") @db.ObjectId
   tokenAddress String
   tokenSymbol String
   tokenName String
@@ -27,7 +27,8 @@ model User {
   rentExpiresAt DateTime?
   masterWalletPK String
   masterWalletAddress String
-  referredByTelegramId String?
+  referredByUserId String?
+  referralTotalEarningsSol Float @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -41,13 +42,22 @@ model VolumeBooster {
   tokenName String
   tokenSymbol String
   fuelAmountFloat Float @default(0)
-  puppetWalletCount Int @default(1)
+  puppetWalletCount Int @default(4)
   puppetWalletPKs String[]
   txDelaySeconds Int @default(0)
   totalBuysSol Float @default(0)
   totalSellsSol Float @default(0)
   status String @default("stopped")
   autoStopAfter DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+
+model RemovedWallet {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  walletAddress String
+  walletPK String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

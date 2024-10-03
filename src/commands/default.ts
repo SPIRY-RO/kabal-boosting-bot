@@ -1,5 +1,5 @@
 import { Context } from "telegraf";
-import { unwrapCommandArguments } from "../helpers";
+// import { unwrapCommandArguments } from "../helpers";
 
 export async function defaultCommand(ctx: Context) {
   // Get the groupId

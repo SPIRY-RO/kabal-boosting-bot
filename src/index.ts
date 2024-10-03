@@ -1,12 +1,12 @@
 import { Telegraf, Markup, Scenes, session } from "telegraf";
 
 import { config } from "./config";
-import { downloadFileFromURL, generateStartMenu, getUserMembershipLevel } from "./helpers";
+import { sendStartMenu } from "./helpers";
 import { PrismaClient } from "@prisma/client";
 import { wizardBasicInput } from "./scenes/basic-input-wizard";
 import { walletAction } from "./actions/wallet";
 import { defaultCommand } from "./commands/default";
-import { rentAction } from "./actions/rent";
+import { rentAction } from "./actions/rent/rent";
 import { initRentDaemon } from "./management/rent/rent-daemon";
 import { comingSoonAction } from "./actions/coming-soon";
 import { showVolumeBoostersAction } from "./actions/volume-booster/show";
@@ -17,13 +17,19 @@ import { changeBoosterStatus, initVolumeBoosterManagerDaemon } from "./managemen
 import { initJitoAverageTipLoop } from "./solana/jito/average-tip";
 import { initAllPriceFeeds } from "./utils/price-feeds";
 import { wizardTopUpVolumeBooster } from "./scenes/topup-volume-booster-wizard";
-import { withdrawSlaveToMasterAction } from "./actions/withdraw";
 import { wizardEditCutoffVolumeBooster } from "./scenes/edit-cutoff-volume-booster-wizard";
+import { buyRentAction } from "./actions/rent/buyrent";
+import { referralsAction } from "./actions/referrals";
+import { getOrCreateUser } from "./helpers/user";
+import { withdrawSlaveToMasterAction } from "./actions/volume-booster/withdraw";
+import { wizardWithdrawMaster } from "./scenes/withdraw-master-wizard";
+import { wizardEditPuppetCountVolumeBooster } from "./scenes/edit-puppcount-volume-booster-wizard";
+import { wizardEditFuelVolumeBooster } from "./scenes/edit-fuel-volume-booster-wizard";
 
 export const prisma = new PrismaClient();
 export const telegraf = new Telegraf(config.TG_BOT_TOKEN);
 
-const stage = new Scenes.Stage([wizardCreateVolumeBooster, wizardEditSpeedVolumeBooster, wizardTopUpVolumeBooster, wizardEditCutoffVolumeBooster]);
+const stage = new Scenes.Stage([wizardCreateVolumeBooster, wizardEditSpeedVolumeBooster, wizardTopUpVolumeBooster, wizardEditCutoffVolumeBooster, wizardWithdrawMaster, wizardEditPuppetCountVolumeBooster, wizardEditFuelVolumeBooster]);
 
 // initRentDaemon();
 
@@ -32,50 +38,38 @@ initAllPriceFeeds();
 initVolumeBoosterManagerDaemon();
 
 telegraf.start(async (ctx) => {
-  ctx.reply(await generateStartMenu(ctx), {
-    // @ts-ignore
-    disable_web_page_preview: true,
-    parse_mode: "HTML",
-    reply_markup: {
-      inline_keyboard: inlineKeyboard,
-    },
-  });
-});
+  const hasPayload = ctx.startPayload;
 
-export let inlineKeyboard = [
-  [
-    {
-      text: "⏳ BUY RENT TIME",
-      callback_data: "rent",
-    },
-  ],
-  [
-    {
-      text: "📈 == KABAL SERVICE BOOSTER == 📉",
-      callback_data: "none",
-    },
-  ],
-  [
-    {
-      text: "📊 Volume Boosters",
-      callback_data: "volume_boosters",
-    },
-    {
-      text: "💼 Holder Boosters",
-      callback_data: "holder_boosters",
-    },
-    {
-      text: "🏆 Rank Boosters",
-      callback_data: "rank_boosters",
-    },
-  ],
-  [
-    {
-      text: "🔙 Main menu",
-      callback_data: "main_menu",
-    },
-  ],
-];
+  if (hasPayload) {
+    // Payload is of format ref-internalUserId
+    const payload = hasPayload.split("-");
+    const referrerId = payload[1];
+
+    // Check if the current user is already referred by someone
+    const user = await getOrCreateUser(ctx.from.id.toString());
+
+    if (user.referredByUserId) {
+      return ctx.reply("You are already referred by someone.");
+    } else {
+      // Prevent the user from referring themselves
+      if (user.id === referrerId) {
+        return ctx.reply("You cannot refer yourself.");
+      }
+
+      // Update the user's referredByTelegramId field
+      await prisma.user.update({
+        where: {
+          id: user.id,
+        },
+        data: {
+          referredByUserId: referrerId,
+        },
+      });
+    }
+  }
+
+  await sendStartMenu(ctx);
+});
 
 telegraf.use(session());
 telegraf.use(stage.middleware());
@@ -95,7 +89,16 @@ telegraf.action("wizard-create-volume-booster", async (ctx: any) => {
     state: "test",
   });
 });
+telegraf.action("wizard-withdraw-master", async (ctx: any) => {
+  ctx.scene.enter("wizard-withdraw-master", {
+    sender: ctx.callbackQuery.from.id,
+    state: "test",
+  });
+});
 
+telegraf.action("referrals", async (ctx: any) => {
+  return referralsAction(ctx);
+});
 telegraf.action("rent", async (ctx: any) => {
   return rentAction(ctx);
 });
@@ -134,6 +137,16 @@ telegraf.action(/\bdata(-\w+)+\b/g, (ctx: any) => {
         boosterId,
       });
     }
+    if (boosterAction === "editpuppcount") {
+      return ctx.scene.enter("wizard-edit-puppetcount-volume-booster", {
+        boosterId,
+      });
+    }
+    if (boosterAction === "editfuel") {
+      return ctx.scene.enter("wizard-edit-fuel-volume-booster", {
+        boosterId,
+      });
+    }
     if (boosterAction === "topup") {
       return ctx.scene.enter("wizard-top-up-volume-booster", {
         boosterId,
@@ -150,6 +163,11 @@ telegraf.action(/\bdata(-\w+)+\b/g, (ctx: any) => {
     // showVolumeBoosterDetails(ctx, boosterId)
     // postManagerAction(ctx, postId, action);
   }
+  if (actionName === "buyrent") {
+    const timeSeconds = args[2];
+    console.log(`Buy rent time: ${timeSeconds}`);
+    return buyRentAction(ctx, parseInt(timeSeconds));
+  }
 
   console.log(`Action name: ${actionName}`);
 
@@ -157,27 +175,11 @@ telegraf.action(/\bdata(-\w+)+\b/g, (ctx: any) => {
 });
 
 telegraf.help(async (ctx: any) => {
-  ctx.reply(await generateStartMenu(ctx), {
-    disable_web_page_preview: true,
-    parse_mode: "HTML",
-    reply_markup: {
-      inline_keyboard: inlineKeyboard,
-    },
-  });
+  await sendStartMenu(ctx);
 });
 
 telegraf.action("main_menu", async (ctx) => {
-  const sender = ctx.callbackQuery.from.id;
-  const rank = await getUserMembershipLevel(sender.toString());
-
-  ctx.reply(await generateStartMenu(ctx), {
-    // @ts-ignore
-    disable_web_page_preview: true,
-    parse_mode: "HTML",
-    reply_markup: {
-      inline_keyboard: inlineKeyboard,
-    },
-  });
+  await sendStartMenu(ctx);
 });
 
 process.once("SIGINT", () => telegraf.stop("SIGINT"));

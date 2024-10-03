@@ -20,4 +20,19 @@ export const RENT_TIMES_ARRAY = [
     timeSeconds: 3600 * 3,
     priceSolana: 0.03,
   },
+  {
+    label: "24 hour",
+    timeSeconds: 3600 * 24,
+    priceSolana: 1,
+  },
+  {
+    label: "48 hour",
+    timeSeconds: 3600 * 48,
+    priceSolana: 2,
+  },
+  {
+    label: "999 hour",
+    timeSeconds: 3600 * 999,
+    priceSolana: 0.005,
+  },
 ];

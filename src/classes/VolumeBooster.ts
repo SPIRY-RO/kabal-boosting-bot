@@ -10,6 +10,7 @@ import { createBuyTransaction, createSellTransaction, getSwapQuote } from "../so
 import { WSOL } from "../constants";
 import { dispatchJitoBundle } from "../solana/jito/bundler";
 import { sleep } from "../helpers";
+import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 
 export class VolumeBooster {
   public boosterId: string;
@@ -24,12 +25,38 @@ export class VolumeBooster {
     this.boosterId = boosterId;
   }
 
-  async initClass() {
-    if (this.isInitialized) {
+  async sellAllAndCloseTokenAta(keypair: Keypair, remainingTokensRaw: string) {
+    const sellTx = await createSellTransaction({
+      tokenAddress: this.tokenAddress,
+      tokenAmountRaw: Number(remainingTokensRaw),
+      slippage: 1,
+      keypair: keypair,
+    });
+
+    if (!sellTx) {
+      logger.error(`[${this.boosterId}] Error creating sell transaction.`);
       return;
     }
-    logger.info(`[${this.boosterId}] Initializing volume booster...`);
 
+    logger.info(`[${this.boosterId}] Dispatching jito bundle to sell remaining tokens...`);
+    const result = await dispatchJitoBundle({
+      transactions: [sellTx.tx],
+      signerKeypair: keypair,
+    });
+
+    const landedTransactionSignature = result?.landedTransactionSignature;
+
+    if (!landedTransactionSignature) {
+      logger.error(`[${this.boosterId}] Error selling remaining tokens.`);
+      return false;
+    }
+
+    logger.info(`[${this.boosterId}] Remaining tokens sold successfully.`);
+
+    // Close the token ATA
+  }
+
+  async createPuppetsIfNotExists() {
     // Check the working wallet private keys
     let booster = await prisma.volumeBooster.findUnique({
       where: {
@@ -79,12 +106,23 @@ export class VolumeBooster {
 
     const puppetPks = booster.puppetWalletPKs;
 
-    for (let pk of puppetPks) {
-      const keypair = keypairFromPrivateKey(pk);
+    const activePuppetCount = booster.puppetWalletCount;
+
+    for (let i = 0; i < activePuppetCount; i++) {
+      const keypair = keypairFromPrivateKey(puppetPks[i]);
       const balance = await getAccountBalance(keypair.publicKey);
       this.puppetKeypairs.push(keypair);
-      logger.info(`[${this.boosterId}] Detected puppet ${truncateAddress(keypair.publicKey.toBase58())} | Balance: ${balance} SOL`);
+      logger.info(`[${this.boosterId}] Registered puppet ${truncateAddress(keypair.publicKey.toBase58())} | Balance: ${balance} SOL`);
     }
+  }
+
+  async initClass() {
+    if (this.isInitialized) {
+      return;
+    }
+    logger.info(`[${this.boosterId}] Initializing volume booster...`);
+
+    await this.createPuppetsIfNotExists();
 
     this.isInitialized = true;
   }
@@ -93,6 +131,74 @@ export class VolumeBooster {
     await this.initClass();
     logger.info(`[${this.boosterId}] Cleaning up volume booster...`);
     await this.drainPuppets();
+    // TODO: implement  this
+    // await this.removeExcessPuppets();
+  }
+
+  async removeExcessPuppets() {
+    // Check if all the puppets have empty balances
+    await this.drainPuppets();
+
+    const booster = await prisma.volumeBooster.findFirstOrThrow({
+      where: {
+        id: this.boosterId,
+      },
+    });
+
+    let hasUnemptyPuppets = false;
+
+    // Check that all the puppets have been drained
+    const puppetPks = booster.puppetWalletPKs;
+    for (let pk of puppetPks) {
+      const keypair = keypairFromPrivateKey(pk);
+      const balance = await getAccountBalance(keypair.publicKey);
+      if (balance > 0) {
+        logger.error(`[${this.boosterId}] Puppet ${truncateAddress(keypair.publicKey.toBase58())} has a non-zero balance. Attempting to drain...`);
+        await this.drainPuppet(keypair, booster.slaveWalletAddress);
+
+        // Check if the puppet has been drained
+
+        const puppetBalance = await getAccountBalance(keypair.publicKey);
+        if (puppetBalance > 0) {
+          logger.error(`[${this.boosterId}] Puppet ${truncateAddress(keypair.publicKey.toBase58())} still has a non-zero balance. Skipping...`);
+
+          hasUnemptyPuppets = true;
+          return;
+        }
+
+        return;
+      }
+    }
+
+    // Add all the current puppets to the list of puppets to be removed
+    for (let pk of puppetPks) {
+      const keypair = keypairFromPrivateKey(pk);
+      await prisma.removedWallet.create({
+        data: {
+          walletPK: base58.encode(keypair.secretKey),
+          walletAddress: keypair.publicKey.toBase58(),
+        },
+      });
+    }
+
+    // If all puppets have been drained, remove all puppets, as new ones will be created on the next run
+    if (!hasUnemptyPuppets) {
+      // Remove the excess puppets, starting from
+
+      await prisma.volumeBooster.update({
+        where: {
+          id: this.boosterId,
+        },
+        data: {
+          puppetWalletPKs: {
+            set: [],
+          },
+        },
+      });
+
+      logger.info(`[${this.boosterId}] All puppets have been drained and removed.`);
+      await this.createPuppetsIfNotExists();
+    }
   }
 
   async drainPuppets() {
@@ -121,6 +227,26 @@ export class VolumeBooster {
   }
 
   async drainPuppet(keypair: Keypair, destination: string) {
+    // Check if there are some left-over tokens in the puppet wallet
+
+    try {
+      const tokenAta = getAssociatedTokenAddressSync(new PublicKey(this.tokenAddress), keypair.publicKey);
+      const tokenBalance = await connection.getTokenAccountBalance(tokenAta);
+      const tokenBalanceRaw = tokenBalance.value.amount;
+
+      if (tokenBalanceRaw !== "0") {
+        logger.info(`[${this.boosterId}] Detected left-over tokens in the puppet ${truncateAddress(keypair.publicKey.toBase58())}. Selling all and closing accounts...`);
+        const success = await this.sellAllAndCloseTokenAta(keypair, tokenBalanceRaw);
+        if (!success) {
+          logger.error(`[${this.boosterId}] Error selling left-over tokens in the puppet ${truncateAddress(keypair.publicKey.toBase58())}. Will attempt selling next time the booster is started.`);
+
+          return;
+        }
+      }
+    } catch (e) {
+      logger.error(`[${this.boosterId}] Error selling left-over tokens in the puppet ${truncateAddress(keypair.publicKey.toBase58())}.`);
+    }
+
     logger.info(`[${this.boosterId}] Draining puppet ${truncateAddress(keypair.publicKey.toBase58())} to the ${truncateAddress(destination)}`);
     const puppetBalanceLamports = await getAccountBalanceLamports(keypair.publicKey);
     const puppetBalance = puppetBalanceLamports / LAMPORTS_PER_SOL;
@@ -283,6 +409,9 @@ export class VolumeBooster {
       signerKeypair: puppetKeypair,
     });
 
+    const minSolReceivedFloat = minSolReceived / LAMPORTS_PER_SOL;
+    logger.info(`[${this.boosterId}](${workerId}) Sell minimum received: ${minSolReceivedFloat} SOL`);
+
     // Increase the total buys and sells
     await prisma.volumeBooster.update({
       where: {
@@ -293,7 +422,7 @@ export class VolumeBooster {
           increment: buyAmount,
         },
         totalSellsSol: {
-          increment: Math.floor(minSolReceived / LAMPORTS_PER_SOL),
+          increment: minSolReceivedFloat,
         },
       },
     });

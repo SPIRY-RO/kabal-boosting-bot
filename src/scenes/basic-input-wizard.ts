@@ -1,8 +1,6 @@
 import { Scenes, Markup } from "telegraf";
 import { prisma, telegraf } from ".."; // Import your database or data store module here
 
-import { downloadFileFromURL } from "../helpers";
-
 export const wizardBasicInput = new Scenes.WizardScene(
   "wizard-basic-input",
   async (ctx: any) => {

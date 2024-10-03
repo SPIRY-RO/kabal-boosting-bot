@@ -17,6 +17,8 @@ export async function showVolumeBoostersAction(ctx: Context) {
       },
     });
 
+    // Loop through all boosters and if auto stop is in the future and the booster is stopped, clear it
+
     let boostersString = `🔊 <b>Volume boosters</b>\n\n`;
 
     let inlineKeyboard = [];

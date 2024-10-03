@@ -6,6 +6,7 @@ import { logger } from "../../utils/logger";
 import { RENT_TIMES_ARRAY } from "../../constants";
 import { Keypair } from "@solana/web3.js";
 import { config } from "../../config";
+import { User } from "@prisma/client";
 
 export async function initRentDaemon() {
   while (true) {
@@ -75,63 +76,54 @@ export async function rentDaemonStep() {
   await Promise.all(rentCheckPromises);
 }
 
-export async function payHighestRentFromUserWallet() {
-  // logger.info(`Checking all work wallets for rent payments...`);
-  const users = await prisma.user.findMany();
+export async function payHighestRentFromUserWallet(user: User) {
+  const balance = await getAccountBalance(new PublicKey(user.masterWalletAddress));
+  let hasEnoughMoneyForRent = false;
+  let selectedTier = null;
 
-  // Create an array of promises for processing each user
-  const rentCheckPromises = users.map(async (user) => {
-    const balance = await getAccountBalance(new PublicKey(user.masterWalletAddress));
-    let hasEnoughMoneyForRent = false;
-    let selectedTier = null;
+  // Check the rent times array by the highest rent time first
+  for (let rentTime of RENT_TIMES_ARRAY) {
+    const requiredAmount = rentTime.priceSolana;
 
-    // Check the rent times array by the highest rent time first
-    for (let rentTime of RENT_TIMES_ARRAY) {
-      const requiredAmount = rentTime.priceSolana;
-
-      if (balance >= requiredAmount) {
-        // User has enough money to pay for this tier
-        hasEnoughMoneyForRent = true;
-        selectedTier = rentTime;
-      } else {
-        continue;
-      }
+    if (balance >= requiredAmount) {
+      // User has enough money to pay for this tier
+      hasEnoughMoneyForRent = true;
+      selectedTier = rentTime;
+    } else {
+      continue;
     }
+  }
 
-    if (!hasEnoughMoneyForRent) {
-      // logger.info(`User ${user.telegramId} does not have enough money to pay for any rent time. Skipping...`);
-      return;
-    }
+  if (!hasEnoughMoneyForRent) {
+    // logger.info(`User ${user.telegramId} does not have enough money to pay for any rent time. Skipping...`);
+    return;
+  }
 
-    if (selectedTier) {
-      logger.info(`User ${user.telegramId} has enough money to pay for at least one rent time. Have: ${balance}, Need: ${selectedTier.priceSolana}. Auto matched Tier: ${selectedTier.label}.`);
+  if (selectedTier) {
+    logger.info(`User ${user.telegramId} has enough money to pay for at least one rent time. Have: ${balance}, Need: ${selectedTier.priceSolana}. Auto matched Tier: ${selectedTier.label}.`);
 
-      // Send Solana for rent payment
-      await sendSolana({
-        fromKeypair: keypairFromPrivateKey(user.masterWalletPK),
-        to: new PublicKey(config.REVENUE_WALLET),
-        amountFloat: selectedTier.priceSolana,
-      });
+    // Send Solana for rent payment
+    await sendSolana({
+      fromKeypair: keypairFromPrivateKey(user.masterWalletPK),
+      to: new PublicKey(config.REVENUE_WALLET),
+      amountFloat: selectedTier.priceSolana,
+    });
 
-      const timeHours = selectedTier.timeSeconds / 3600;
-      const previousRentExpiresAt = user.rentExpiresAt || new Date();
+    const timeHours = selectedTier.timeSeconds / 3600;
+    const previousRentExpiresAt = user.rentExpiresAt || new Date();
 
-      // Update rent expiration time
-      await prisma.user.update({
-        where: {
-          id: user.id,
-        },
-        data: {
-          rentExpiresAt: new Date(previousRentExpiresAt.getTime() + selectedTier.timeSeconds * 1000),
-        },
-      });
+    // Update rent expiration time
+    await prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        rentExpiresAt: new Date(previousRentExpiresAt.getTime() + selectedTier.timeSeconds * 1000),
+      },
+    });
 
-      // Notify user
-      const message = `Your rent has been prolonged with ${timeHours} hours. Enjoy!`;
-      await telegraf.telegram.sendMessage(user.telegramId, message);
-    }
-  });
-
-  // Wait for all promises to resolve
-  await Promise.all(rentCheckPromises);
+    // Notify user
+    const message = `Your rent has been prolonged with ${timeHours} hours. Enjoy!`;
+    await telegraf.telegram.sendMessage(user.telegramId, message);
+  }
 }
