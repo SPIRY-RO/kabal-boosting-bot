@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es2015",
+    "target": "es2018",
     "module": "commonjs",
     "lib": ["es6", "dom"],
     "allowJs": true,
@@ -9,6 +9,7 @@
     "strict": true,
     "noImplicitAny": true,
     "esModuleInterop": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "allowUnreachableCode": true
   }
 }

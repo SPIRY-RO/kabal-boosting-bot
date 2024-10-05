@@ -10,54 +10,50 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model TokenInfo {
-  id         String  @id @default(auto()) @map("_id") @db.ObjectId
-  tokenAddress String
-  tokenSymbol String
-  tokenName String
-  tokenDecimals Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+model Booster {
+  internalID            String @id @default(auto()) @map("_id") @db.ObjectId
+  ownerTgID             String @default("")
+  type                  String
+  tokenAddress          String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
+
+model Puppet {
+  internalID            String @id @default(auto()) @map("_id") @db.ObjectId
+  ownerTgID             String @default("")
+  boosterID             String
+  privKey               String
+  pubKey                String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
 
 model User {
-  id    String  @id @default(auto()) @map("_id") @db.ObjectId
-  telegramId  String  
-  previouslyUsedTokens String[]
-  rentExpiresAt DateTime?
-  masterWalletPK String
-  masterWalletAddress String
-  referredByUserId String?
-  referralTotalEarningsSol Float @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  internalID            String @id @default(auto()) @map("_id") @db.ObjectId // original definition
+  tgID                  String @unique
+  isBotAdmin            Boolean @default(false)
+  workWalletPrivKey     String
+  workWalletPubkey      String
+  withdrawWalletAddr    String @default("")
+  rentExpiresAt         Int @default(0)
+  referredByTgID        String @default("")
+  totalRefRewards       Float    @default(0.0)
+  lastPuppetPKs         String[] @default([])
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
-model VolumeBooster {
-  id         String  @id @default(auto()) @map("_id") @db.ObjectId
-  slaveWalletPK String
-  slaveWalletAddress String
-  ownerId    String
-  tokenAddress String
-  tokenName String
-  tokenSymbol String
-  fuelAmountFloat Float @default(0)
-  puppetWalletCount Int @default(4)
-  puppetWalletPKs String[]
-  txDelaySeconds Int @default(0)
-  totalBuysSol Float @default(0)
-  totalSellsSol Float @default(0)
-  status String @default("stopped")
-  autoStopAfter DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-
-model RemovedWallet {
-  id        String  @id @default(auto()) @map("_id") @db.ObjectId
-  walletAddress String
-  walletPK String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+model Settings {
+  internalID            String @id @default(auto()) @map("_id") @db.ObjectId // original definition
+  ownerTgID             String @unique
+  selectedTokenAddr     String @default("")
+  volumeSpeed           Int @default(1)
+  volumeDuration        Int @default(3600)
+  volumeParallelWallets Int @default(2)
+  holdersNewHolders     Int @default(500)
+  rankParallelWallets   Int @default(10)
+  rankRotateEveryNTx    Int @default(40)
 }

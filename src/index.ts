@@ -1,188 +1,185 @@
-import { Telegraf, Markup, Scenes, session } from "telegraf";
-
-import { config } from "./config";
-import { sendStartMenu } from "./helpers";
+import * as solana from "@solana/web3.js";
+import { Telegraf, Scenes, session } from "telegraf";
 import { PrismaClient } from "@prisma/client";
-import { wizardBasicInput } from "./scenes/basic-input-wizard";
-import { walletAction } from "./actions/wallet";
-import { defaultCommand } from "./commands/default";
-import { rentAction } from "./actions/rent/rent";
-import { initRentDaemon } from "./management/rent/rent-daemon";
-import { comingSoonAction } from "./actions/coming-soon";
-import { showVolumeBoostersAction } from "./actions/volume-booster/show";
-import { wizardCreateVolumeBooster } from "./scenes/create-volume-booster-wizard";
-import { showVolumeBoosterDetailsAction } from "./actions/volume-booster/details";
-import { wizardEditSpeedVolumeBooster } from "./scenes/edit-speed-volume-booster-wizard";
-import { changeBoosterStatus, initVolumeBoosterManagerDaemon } from "./management/boosters/volume-booster";
-import { initJitoAverageTipLoop } from "./solana/jito/average-tip";
-import { initAllPriceFeeds } from "./utils/price-feeds";
-import { wizardTopUpVolumeBooster } from "./scenes/topup-volume-booster-wizard";
-import { wizardEditCutoffVolumeBooster } from "./scenes/edit-cutoff-volume-booster-wizard";
-import { buyRentAction } from "./actions/rent/buyrent";
-import { referralsAction } from "./actions/referrals";
-import { getOrCreateUser } from "./helpers/user";
-import { withdrawSlaveToMasterAction } from "./actions/volume-booster/withdraw";
-import { wizardWithdrawMaster } from "./scenes/withdraw-master-wizard";
-import { wizardEditPuppetCountVolumeBooster } from "./scenes/edit-puppcount-volume-booster-wizard";
-import { wizardEditFuelVolumeBooster } from "./scenes/edit-fuel-volume-booster-wizard";
+import bs58 from "bs58";
+
+import { envConf } from "./config";
+import { showHelpMessage } from "./commands/help";
+import { answerCbQuerySafe, keypairFrom } from "./helpers";
+//import { PkToAddress, TestCalcAmounts, TestMisc, TestRankBoostWorkflow } from "./test";
+import UserManager from "./classes/UserManager";
+import { showUserBoosters } from "./actions/boosters-show-all";
+import { showBooster } from "./actions/booster-show";
+import {
+  referIfNeeded_thenShowStart, refreshWorkMenu, showWelcomeMessage as showWelcomeMessage,
+  showWorkMenu,
+} from "./commands/start";
+import { showReferralMenu } from "./actions/referrals-menu";
+import { rentBot, showRentOptions } from "./actions/rent-bot";
+import { showWallet, withdrawFunds } from "./actions/wallet";
+import { wizardWalletSet, wizardWalletSet_name } from "./scenes/wallet-set";
+import { createAndStartBooster } from "./actions/booster-start";
+import {
+  holderSettingsDecrease, holderSettingsIncrease, setChangeMakerFreqSettings, setDurationSettings, setRankParallelSettings, setSpeedSettings, setVolumeParallelSettings, showChangeMakerFreqSettings, showDurationSettings,
+  showRankParallelSettings,
+  showSpeedSettings,
+  showVolumeParallelSettings,
+} from "./actions/settings";
+import { wizardSetAddr, wizardSetAddr_name } from "./scenes/set-active-address";
+import { registerCommands } from "./commands/register_commands";
+import { stopBooster } from "./actions/booster-stop";
+import { runJitoTipAccsUpdater, runJitoTipMetricUpdater } from "./utils/jito-tip-deamons";
+import JitoStatusChecker from "./classes/JitoStatusChecker";
+import { initSolanaPriceFeedDaemon } from "./utils/price-feeds";
+
 
 export const prisma = new PrismaClient();
-export const telegraf = new Telegraf(config.TG_BOT_TOKEN);
+export const telegraf = new Telegraf(envConf.TG_BOT_TOKEN);
+export const web3Connection = new solana.Connection(envConf.HTTP_RPC_URL, { commitment: "confirmed" });
+export const userManager = new UserManager();
+export const statusChecker = new JitoStatusChecker();
 
-const stage = new Scenes.Stage([wizardCreateVolumeBooster, wizardEditSpeedVolumeBooster, wizardTopUpVolumeBooster, wizardEditCutoffVolumeBooster, wizardWithdrawMaster, wizardEditPuppetCountVolumeBooster, wizardEditFuelVolumeBooster]);
+console.log(`\nBooster bot starting up`);
 
-// initRentDaemon();
+//TestMisc();
+//TestCalcAmounts();
+//jupiterJitoTest();
+//TestRankBoostWorkflow();
+//PkToAddress();
 
-initJitoAverageTipLoop();
-initAllPriceFeeds();
-initVolumeBoosterManagerDaemon();
+//console.log(bs58.encode(solana.Keypair.generate().secretKey));
 
-telegraf.start(async (ctx) => {
-  const hasPayload = ctx.startPayload;
 
-  if (hasPayload) {
-    // Payload is of format ref-internalUserId
-    const payload = hasPayload.split("-");
-    const referrerId = payload[1];
-
-    // Check if the current user is already referred by someone
-    const user = await getOrCreateUser(ctx.from.id.toString());
-
-    if (user.referredByUserId) {
-      return ctx.reply("You are already referred by someone.");
-    } else {
-      // Prevent the user from referring themselves
-      if (user.id === referrerId) {
-        return ctx.reply("You cannot refer yourself.");
-      }
-
-      // Update the user's referredByTelegramId field
-      await prisma.user.update({
-        where: {
-          id: user.id,
-        },
-        data: {
-          referredByUserId: referrerId,
-        },
-      });
-    }
-  }
-
-  await sendStartMenu(ctx);
-});
+const stage = new Scenes.Stage([
+  wizardWalletSet,
+  wizardSetAddr
+]);
 
 telegraf.use(session());
-telegraf.use(stage.middleware());
-// Actions
+telegraf.use(stage.middleware()); // in case you'll add scenes
 
-// telegraf.action("twitter_settings", async (ctx) => {
-//   twitterSettingsAction(ctx);
-// });
+/* Good place for calling & testing functions you want to test in isolation */
 
-telegraf.command("default", async (ctx) => {
-  return defaultCommand(ctx);
-});
+// has to be before telegraf.start()
+telegraf.hears(/^\/start[ =](.+)$/, (ctx) => referIfNeeded_thenShowStart(ctx, ctx.match[1]));
 
-telegraf.action("wizard-create-volume-booster", async (ctx: any) => {
-  ctx.scene.enter("wizard-create-volume-booster", {
-    sender: ctx.callbackQuery.from.id,
-    state: "test",
-  });
-});
-telegraf.action("wizard-withdraw-master", async (ctx: any) => {
-  ctx.scene.enter("wizard-withdraw-master", {
-    sender: ctx.callbackQuery.from.id,
-    state: "test",
-  });
-});
+telegraf.start(showWelcomeMessage);
+telegraf.help(showHelpMessage);
+telegraf.command("menu", showWorkMenu);
+telegraf.command(["boosters", "my_boosters", "my_boosts"], showUserBoosters);
+//telegraf.command(["stop_boost", "stop_booster"], stopBooster);
 
-telegraf.action("referrals", async (ctx: any) => {
-  return referralsAction(ctx);
+/* Admin commands */
+//telegraf.command("stop_all", stopAllBoosters_admin);
+telegraf.command("register_commands", registerCommands);
+
+telegraf.action("my_boosters", showUserBoosters);
+telegraf.action("welcome_message", showWelcomeMessage);
+telegraf.action("work_menu", showWorkMenu);
+telegraf.action("work_menu_refresh", refreshWorkMenu);
+telegraf.action("referrals", showReferralMenu);
+telegraf.action("show_rent", showRentOptions);
+telegraf.action("wallet", showWallet);
+telegraf.action("withdraw", withdrawFunds);
+
+telegraf.action("settings_speed", showSpeedSettings);
+telegraf.action("settings_duration", showDurationSettings);
+telegraf.action("settings_volume_parallel", showVolumeParallelSettings);
+telegraf.action("settings_holders_inc", holderSettingsIncrease);
+telegraf.action("settings_holders_dec", holderSettingsDecrease);
+telegraf.action("settings_rank_parallel", showRankParallelSettings);
+telegraf.action("settings_rank_frequency", showChangeMakerFreqSettings);
+
+/* Wizards */
+
+telegraf.action("token_address_wizard", async (ctx: any) => {
+  ctx.scene.enter(wizardSetAddr_name, {});
 });
-telegraf.action("rent", async (ctx: any) => {
-  return rentAction(ctx);
-});
-telegraf.action("volume_boosters", async (ctx: any) => {
-  return showVolumeBoostersAction(ctx);
-});
-telegraf.action("holder_boosters", async (ctx: any) => {
-  return comingSoonAction(ctx);
-});
-telegraf.action("rank_boosters", async (ctx: any) => {
-  return comingSoonAction(ctx);
+telegraf.action("withdrawal_wallet", async (ctx: any) => {
+  ctx.scene.enter(wizardWalletSet_name, {});
 });
 
 telegraf.action(/\bdata(-\w+)+\b/g, (ctx: any) => {
   const string = ctx.match[0];
   const args = string.split("-");
   const actionName = args[1];
-  const sender = ctx.callbackQuery.from.id;
-  if (actionName === "volume_booster") {
-    const boosterId = args[2];
-    const boosterAction = args[3];
-
-    if (boosterAction === "view") {
-      return showVolumeBoosterDetailsAction(ctx, boosterId);
+  if (actionName === "setEntry") {
+    const senderId = args[2];
+    //setTimezoneCommand_forcedSender(ctx, senderId);
+  } else if (actionName === "boosterShow") {
+    const boosterType = args[2];
+    const boosterID = args[3];
+    showBooster(ctx, boosterType, boosterID);
+  } else if (actionName === "boosterRefresh") {
+    const boosterType = args[2];
+    const boosterID = args[3];
+    const refreshOnly = true;
+    showBooster(ctx, boosterType, boosterID, refreshOnly);
+  } else if (actionName === "boosterStart") {
+    const boosterType = args[2];
+    return createAndStartBooster(ctx, boosterType);
+  } else if (actionName === "boosterStop") {
+    const boosterType = args[2];
+    const boosterID = args[3];
+    return stopBooster(ctx, boosterType, boosterID);
+  } else if (actionName === "settings") {
+    const setting = args[2];
+    const settingValue = args[3];
+    if (setting == "speed") {
+      setSpeedSettings(ctx, settingValue);
+    } else if (setting == "duration") {
+      setDurationSettings(ctx, settingValue);
+    } else if (setting == "parallelVolume") {
+      setVolumeParallelSettings(ctx, settingValue);
+    } else if (setting == "parallelRank") {
+      setRankParallelSettings(ctx, settingValue);
+    } else if (setting == "makers") {
+      setChangeMakerFreqSettings(ctx, settingValue);
+    } else {
+      return answerCbQuerySafe(ctx, `Unknown type of setting: ${setting}! 👎`);
     }
-    if (boosterAction === "withdraw") {
-      return withdrawSlaveToMasterAction(ctx, boosterId);
-    }
-    if (boosterAction === "editspeed") {
-      return ctx.scene.enter("wizard-edit-speed-volume-booster", {
-        boosterId,
-      });
-    }
-    if (boosterAction === "editcutoff") {
-      return ctx.scene.enter("wizard-edit-cutoff-volume-booster", {
-        boosterId,
-      });
-    }
-    if (boosterAction === "editpuppcount") {
-      return ctx.scene.enter("wizard-edit-puppetcount-volume-booster", {
-        boosterId,
-      });
-    }
-    if (boosterAction === "editfuel") {
-      return ctx.scene.enter("wizard-edit-fuel-volume-booster", {
-        boosterId,
-      });
-    }
-    if (boosterAction === "topup") {
-      return ctx.scene.enter("wizard-top-up-volume-booster", {
-        boosterId,
-      });
-    }
-    if (boosterAction === "start") {
-      changeBoosterStatus(boosterId, "start_requested");
-    }
-
-    if (boosterAction === "stop") {
-      changeBoosterStatus(boosterId, "stop_requested");
-    }
-
-    // showVolumeBoosterDetails(ctx, boosterId)
-    // postManagerAction(ctx, postId, action);
-  }
-  if (actionName === "buyrent") {
-    const timeSeconds = args[2];
-    console.log(`Buy rent time: ${timeSeconds}`);
-    return buyRentAction(ctx, parseInt(timeSeconds));
+  } else if (actionName === "rent") {
+    const duration = args[2];
+    rentBot(ctx, duration);
+    /*ctx.scene.enter(wizardSetTzLocation_name, {
+      senderId: senderId,
+    });*/
+  } else {
+    return answerCbQuerySafe(ctx, `Unknown action: ${actionName}! 👎`);
   }
 
-  console.log(`Action name: ${actionName}`);
-
-  return ctx.answerCbQuery(`Param: ${ctx.match[1]}! 👍`);
-});
-
-telegraf.help(async (ctx: any) => {
-  await sendStartMenu(ctx);
-});
-
-telegraf.action("main_menu", async (ctx) => {
-  await sendStartMenu(ctx);
+  //console.log(`Action name: ${actionName}`);
+  return answerCbQuerySafe(ctx);
 });
 
 process.once("SIGINT", () => telegraf.stop("SIGINT"));
 process.once("SIGTERM", () => telegraf.stop("SIGTERM"));
 
 telegraf.launch();
+
+runJitoTipMetricUpdater();
+runJitoTipAccsUpdater();
+initSolanaPriceFeedDaemon();
+statusChecker.run();
+
+
+//adjustDatabaseValues();
+async function adjustDatabaseValues() {
+  const desiredParallelRankWallets = 15;
+
+  await prisma.settings.updateMany({
+    data: {
+      rankParallelWallets: desiredParallelRankWallets,
+    }
+  });
+  console.log(`Database values adjusted as requested`);
+}
+
+//showAllPubkeys();
+async function showAllPubkeys() {
+  const allEntries = await prisma.user.findMany();
+  for (const entry of allEntries) {
+    const kp = keypairFrom(entry.workWalletPrivKey);
+    console.log(`${kp.publicKey.toBase58()}; tgID ${entry.tgID}`);
+  }
+}
