@@ -36,7 +36,7 @@ export async function dispatchJitoBundle({ transactions, tipAmountOverrideFloat,
 
   // Add 15% tip to the bundle
 
-  tipAmountLamports = Math.floor(tipAmountLamports * 1.5);
+  tipAmountLamports = Math.floor(tipAmountLamports * 1.2);
 
   bundle.addTipTx(signerKeypair, tipAmountLamports, tipAccount, latestBlockhash.blockhash);
 
